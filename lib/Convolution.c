@@ -49,8 +49,8 @@ struct OpaqueConvolutionStruct
 /*--------------------------------------------------------------------*/
 Convolution_Uniform_Partitioning* conv_new_uniform_partitioning_private(dft_sample_t* ir, int ir_len, int block_size /*power of 2*/, int segment_offset,  void* parent);
 Convolution_Uniform_Partitioning* conv_destroy_uniform_paritioning(Convolution_Uniform_Partitioning* self);
-void conv_process_uniform_partitioning(Convolution_Uniform_Partitioning* self, dft_sample_t* input, int num_samples);
-void conv_output_ready(Convolution* SELF, dft_sample_t* output, int num_samples, int segment_offset);
+void conv_process_uniform_partitioning(Convolution_Uniform_Partitioning* self, dft_sample_t* input, int num_samples, void* const hBin);
+void conv_output_ready(Convolution* SELF, dft_sample_t* output, int num_samples, int segment_offset, void* const hBin);
 //void conv_calculate_total_filter_length(Convolution* self);
 
 /*--------------------------------------------------------------------*/
@@ -145,7 +145,7 @@ Convolution_Uniform_Partitioning* conv_destroy_uniform_paritioning(Convolution_U
 }
 
 /*--------------------------------------------------------------------*/
-void conv_process_uniform_partitioning(Convolution_Uniform_Partitioning* self, dft_sample_t* input, int num_samples)
+void conv_process_uniform_partitioning(Convolution_Uniform_Partitioning* self, dft_sample_t* input, int num_samples, void* const hBin)
 {
   while(num_samples > 0)
     {
@@ -185,7 +185,7 @@ void conv_process_uniform_partitioning(Convolution_Uniform_Partitioning* self, d
           rdft_real_inverse_dft(self->output_buffer, self->fft_n);
           //self->output_ready_callback(self->output_ready_callback_self, self->output_buffer+self->block_length, self->block_length);
 
-          conv_output_ready(self->parent, self->output_buffer+self->block_length, self->block_length, self->segment_offset);
+          conv_output_ready(self->parent, self->output_buffer+self->block_length, self->block_length, self->segment_offset, hBin);
         
           self->num_samples_received = 0;
           //++self->delay_line_index;
@@ -202,13 +202,13 @@ void conv_process_uniform_partitioning(Convolution_Uniform_Partitioning* self, d
 }
 
 /*--------------------------------------------------------------------*/
-void conv_output_ready(Convolution* SELF, dft_sample_t* output, int num_samples, int segment_offset)
+void conv_output_ready(Convolution* SELF, dft_sample_t* output, int num_samples, int segment_offset, void* const hBin)
 {
   Convolution* self = (Convolution*) SELF;
   
   if(self->num_filter_segments == 1)
     {
-      self->output_ready_callback(self->output_ready_callback_self, output, num_samples);
+      self->output_ready_callback(self->output_ready_callback_self, output, num_samples, hBin);
       return;
     }
     
@@ -225,7 +225,7 @@ void conv_output_ready(Convolution* SELF, dft_sample_t* output, int num_samples,
       
       if(segment_offset == 0)
         {
-          self->output_ready_callback(self->output_ready_callback_self, self->output_buffer + self->output_ring_index, num_samples);
+          self->output_ready_callback(self->output_ready_callback_self, self->output_buffer + self->output_ring_index, num_samples, hBin);
           memset(self->output_buffer + self->output_ring_index, 0, num_samples * sizeof(dft_sample_t));
           self->output_ring_index += num_samples;
           self->output_ring_index %= self->output_buffer_length;
@@ -234,7 +234,7 @@ void conv_output_ready(Convolution* SELF, dft_sample_t* output, int num_samples,
 }
 
 /*--------------------------------------------------------------------*/
-Convolution* conv_new_private(int num_segments, conv_output_callback_t output_callback, void* callback_self)
+Convolution* conv_new_private(int num_segments, conv_output_callback_t output_callback,  void* callback_self)
 {
   Convolution* self = (Convolution*) calloc(1, sizeof(*self));
   if(self != NULL)
@@ -250,7 +250,7 @@ Convolution* conv_new_private(int num_segments, conv_output_callback_t output_ca
 }
 
 /*--------------------------------------------------------------------*/
-Convolution* conv_new_uniform_partitioning(dft_sample_t* ir, int ir_len, int latency /*power of 2*/, conv_output_callback_t output_callback, void* callback_self)
+Convolution* conv_new_uniform_partitioning(dft_sample_t* ir, int ir_len, int latency /*power of 2*/, conv_output_callback_t output_callback, void* const hBin, void* callback_self)
 {
   Convolution* self = conv_new_private(1, output_callback, callback_self);
   if(self != NULL)
@@ -270,7 +270,7 @@ float double_fdl_cost(float k, float N, float B, float T)
 }
 
 /*--------------------------------------------------------------------*/
-Convolution* conv_new_double_fdl(dft_sample_t* ir, int ir_len, int latency /*power of 2*/, conv_output_callback_t output_callback, void* callback_self)
+Convolution* conv_new_double_fdl(dft_sample_t* ir, int ir_len, int latency /*power of 2*/, conv_output_callback_t output_callback, void* const hBin, void* callback_self)
 {
   int T = latency * ceil(ir_len / (float)latency);
   float k = CONV_K;
@@ -290,7 +290,7 @@ Convolution* conv_new_double_fdl(dft_sample_t* ir, int ir_len, int latency /*pow
   int block_sizes[2]        = {latency, b_final};
   int blocks_per_segment[2] = {head_length/latency, tail_length/b_final};
   
-  Convolution* self = conv_new_multiple_partitioning(ir, ir_len, 2, block_sizes, blocks_per_segment, output_callback, callback_self);
+  Convolution* self = conv_new_multiple_partitioning(ir, ir_len, 2, block_sizes, blocks_per_segment, output_callback, hBin, callback_self);
   if(self != NULL)
     {
       self->cost = (b_upper_cost < b_lower_cost) ? b_upper_cost : b_lower_cost;
@@ -299,7 +299,7 @@ Convolution* conv_new_double_fdl(dft_sample_t* ir, int ir_len, int latency /*pow
 }
 
 /*--------------------------------------------------------------------*/
-Convolution* conv_new_multiple_partitioning(dft_sample_t* ir, int ir_len, int num_segments, int block_sizes[], int blocks_per_segment[], conv_output_callback_t output_callback, void* callback_self)
+Convolution* conv_new_multiple_partitioning(dft_sample_t* ir, int ir_len, int num_segments, int block_sizes[], int blocks_per_segment[], conv_output_callback_t output_callback, void* const hBin, void* callback_self)
 {
   Convolution* self = conv_new_private(num_segments, output_callback, callback_self);
   if(self != NULL)
@@ -346,7 +346,7 @@ int conv_get_p(int i)
 
 /*--------------------------------------------------------------------*/
 #define IX(vals, cols, row, col) vals[(row) * (cols) + (col)]
-Convolution* conv_new_optimum_partitioning(dft_sample_t* ir, int ir_len, int latency, conv_output_callback_t output_callback, void* callback_self)
+Convolution* conv_new_optimum_partitioning(dft_sample_t* ir, int ir_len, int latency, conv_output_callback_t output_callback, void* const hBin, void* callback_self)
 {
   if (ir_len <= 0) return NULL;
   
@@ -494,7 +494,7 @@ Convolution* conv_new_optimum_partitioning(dft_sample_t* ir, int ir_len, int lat
   
   free(cost_matrix);
   
-  Convolution* self = conv_new_multiple_partitioning(ir, ir_len, num_segments, block_sizes, blocks_per_segment, output_callback, callback_self);
+  Convolution* self = conv_new_multiple_partitioning(ir, ir_len, num_segments, block_sizes, blocks_per_segment, output_callback, hBin, callback_self);
   if(self != NULL)
     {
       self->cost = min_cost;
@@ -582,7 +582,7 @@ Convolution* conv_destroy(Convolution* self)
 }
 
 /*--------------------------------------------------------------------*/
-void conv_process(Convolution* self, dft_sample_t* input, int num_samples)
+void conv_process(Convolution* self, dft_sample_t* input, int num_samples, void* const hBin)
 {
   int i;
   int smallest_block_size = self->filter_segments[0]->block_length;
@@ -591,7 +591,7 @@ void conv_process(Convolution* self, dft_sample_t* input, int num_samples)
     {
       int samples_to_process = CONV_MIN(num_samples, smallest_block_size);
       for(i=0; i<self->num_filter_segments; i++)
-        conv_process_uniform_partitioning(self->filter_segments[i], input, samples_to_process);
+        conv_process_uniform_partitioning(self->filter_segments[i], input, samples_to_process, hBin);
       
       input += samples_to_process;
       num_samples -= samples_to_process;

@@ -9,17 +9,17 @@ extern "C"{
 
 typedef struct OpaqueConvolutionStruct Convolution;
 
-typedef void (*conv_output_callback_t)(void* SELF, dft_sample_t* output, int num_samples);
+typedef void (*conv_output_callback_t)(void* SELF, dft_sample_t* output, int num_samples, void* const hBin);
 
-Convolution* conv_new_uniform_partitioning (dft_sample_t* ir, int ir_len, int latency /*power of 2*/, conv_output_callback_t output_callback, void* callback_self);
+Convolution* conv_new_uniform_partitioning (dft_sample_t* ir, int ir_len, int latency /*power of 2*/, conv_output_callback_t output_callback, void* const hBin, void* callback_self);
 
-Convolution* conv_new_double_fdl           (dft_sample_t* ir, int ir_len, int latency /*power of 2*/, conv_output_callback_t output_callback, void* callback_self);
+Convolution* conv_new_double_fdl           (dft_sample_t* ir, int ir_len, int latency /*power of 2*/, conv_output_callback_t output_callback, void* const hBin, void* callback_self);
 
-Convolution* conv_new_multiple_partitioning(dft_sample_t* ir, int ir_len, int num_segments, int block_sizes[], int blocks_per_segment[], conv_output_callback_t output_callback, void* callback_self);
+Convolution* conv_new_multiple_partitioning(dft_sample_t* ir, int ir_len, int num_segments, int block_sizes[], int blocks_per_segment[], conv_output_callback_t output_callback, void* const hBin, void* callback_self);
 
-Convolution* conv_new_optimum_partitioning (dft_sample_t* ir, int ir_len, int latency /*power of 2*/, conv_output_callback_t output_callback, void* callback_self);
+Convolution* conv_new_optimum_partitioning (dft_sample_t* ir, int ir_len, int latency /*power of 2*/, conv_output_callback_t output_callback, void* const hBin, void* callback_self);
 
-void         conv_process           (Convolution* self, dft_sample_t* input, int num_samples);
+void         conv_process           (Convolution* self, dft_sample_t* input, int num_samples, void* const hBin);
 int          conv_get_latency       (Convolution* self);
 int          conv_get_num_segments  (Convolution* self);
 int          conv_get_ir_length     (Convolution* self);
